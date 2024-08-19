@@ -8,35 +8,29 @@ class nucleus():
         self.inputs = inputs
         self.into = []
         #self.function = opt ##Look into dictionaries more, for now it's just one function
-        for i in range(inputs):
+        for f in range(inputs):
             self.into.append(0)
         self.value = 0
         self.output = 0
-        self.end = 0
         self.train = 0
+        self.active = "sig"
     def func(self,val):
-        if (self.end == 0):
-            self.value = (1/(1+math.exp(-val))) - 0.5 ##Why 0.5
-        else:
-            if (val != 0):
-                self.value = val/abs(val)
-            else:
-                self.value = 0
+        self.value = (1/(1+math.exp(-val)))
     def pass_out(self):
         if (self.value != 0):
             self.output = self.value
             if (self.train == 0):
                 self.value = 0
-            elif (self.train > 0):
-                self.value = self.value
+            else:
+                self.value *=1
     def pass_in(self):
         if (type(self.into) == float):
             self.func(self.into)
             self.into = 0
         else:
             self.func(sum(self.into))
-            for i in self.into:
-                i = 0
+            for f in self.into:
+                f = 0
 
     
 class wire_in():
@@ -56,6 +50,10 @@ class wire_out():
             raise TypeError("Must have nuclei as inputs")
     def update(self):
         self.value = self.input.output
+        if (self.value != 0):
+            self.value = self.value/abs(self.value)
+        else:
+            self.value = 0
 
 
 
@@ -84,6 +82,7 @@ class net():
         self.output = output
         self.width = width
         self.train_data = []
+        self.training = 0
         ###Set Up Inputs###
         self.inputs = []
         for i in range(self.input):
@@ -150,7 +149,6 @@ class net():
         for i in self.inwires:
             i.update()
         for i in self.inputs:
-            i.train = 1
             i.pass_in()
             i.pass_out()
         for i in self.middle_wire_in:
@@ -159,31 +157,29 @@ class net():
         for i in self.middle_wire_out:
             i.update()
         for i in self.outputs:
-            i.train = 1
             i.pass_in()
             i.pass_out()
         for i in self.wires_out:
             i.update()
     def mid_net(self):
         for i in self.middle_1:
-            i.train = 1
             i.pass_in()
             i.pass_out()
         for i in range(self.hidden-2):
             for j in self.middle_wires[i]:
                 j.update()
             for j in self.middle[i]:
-                j.train = 1
                 j.pass_in()
                 j.pass_out()
         for j in self.middle_wires[self.hidden-2]:
             j.update()
         for j in self.middle_n:
-            j.train = 1
             j.pass_in()
             j.pass_out()
-        for j in self.middle_wire_out:
-            j.update()
+        #for j in self.middle_wire_out:
+        #    if (self.training > 0):
+        #        j.train = 1
+        #    j.update()
 
     def move(self):
         self.in_net()
@@ -195,6 +191,18 @@ class net():
             print("OUTPUT: ",i.value)
 
     def train(self):
+        self.training = 1
+        for j in self.inputs:
+            j.train = 1
+        for j in self.middle_1:
+            j.train = 1
+        for u in range(self.hidden-2):
+            for j in self.middle[u]:
+                j.train = 1
+        for j in self.middle_n:
+            j.train = 1
+        for j in self.outputs:
+            j.train = 1
         #Start at the outputs - for now just make it work with this set of data, then focus on something generic, maybe a new function that expects a certain array
         self.c = 1
         ##Start at the end -- self.wires_out this will be the predicted value, training data value will be the true
@@ -209,13 +217,15 @@ class net():
                 i.value = float(self.train_data[j,1])
             self.move()
             diff = []
-            for i in self.wires_out:
-                diff.append(-(self.train_data[j,0]/i.value)-((1-self.train_data[j,0])/(1-i.value)))
-                j+=1
-                print("DIFF: ",diff)
-            for i in self.outputs:
-                print(i.value)
-                #u+=1
+            for i in range(len(self.outputs)):
+                diff.append((self.outputs[i].value - self.train_data[j,0]) * (self.outputs[i].value * (1 - self.outputs[i].value)))
+            print(diff)
+            for i in range(len(self.middle_n)):
+                for t in range(len(self.outputs)):
+
+
+            j+=1
+            
 
         ##Calculate difference between true and predicted for the last neuron
         ##Go through this for every layer (dA)

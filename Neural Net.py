@@ -2,9 +2,10 @@ import csv
 import math
 import numpy as np
 from Frames import image
-#import random
+import random as r
+import matplotlib.pyplot as plt
 class nucleus():
-    def __init__(self,inputs):
+    def __init__(self,inputs,fun):
         self.inputs = inputs
         self.into = []
         #self.function = opt ##Look into dictionaries more, for now it's just one function
@@ -13,9 +14,20 @@ class nucleus():
         self.value = 0
         self.output = 0
         self.train = 0
-        self.active = "sig"
+        self.training_val = 0
+        self.active = fun
     def func(self,val):
-        self.value = (1/(1+math.exp(-val)))
+        if (self.active == "sig"):
+            if (type(val) == float):
+                self.value = (1/(1+math.exp(-val)))
+            else:
+                self.value = (1/(1+math.exp(-sum(val))))
+        if (self.active == "rel"):
+            if (type(val) == float):
+                self.value = max(0,val)
+            else:
+                val.append(0)
+                self.value = max(val)
     def pass_out(self):
         if (self.value != 0):
             self.output = self.value
@@ -28,7 +40,7 @@ class nucleus():
             self.func(self.into)
             self.into = 0
         else:
-            self.func(sum(self.into))
+            self.func(self.into)
             for f in self.into:
                 f = 0
 
@@ -50,7 +62,7 @@ class wire_out():
             raise TypeError("Must have nuclei as inputs")
     def update(self):
         self.value = self.input.output
-        if (self.value != 0):
+        if (self.value >= 0.5):
             self.value = self.value/abs(self.value)
         else:
             self.value = 0
@@ -63,14 +75,14 @@ class wire():
         self.output = output
         self.value = 0
         self.into = num
-        self.weight = 1 ###This needs to be changed to change the value 
+        n = r.random()
+        self.weight = n
+        self.bias = 0
         if (type(self.input) != nucleus or type(self.output) != nucleus):
             raise TypeError("Must have nuclei as inputs and outputs")
     def update(self):
-        self.value = self.input.output * self.weight
+        self.value = (self.input.output * self.weight) + self.bias
         self.output.into[self.into] = self.value ##This needs to be changed, not append
-    def update_w(self,weigh):
-        self.weight = weigh
 
 
 class net():
@@ -82,13 +94,12 @@ class net():
         self.output = output
         self.width = width
         self.train_data = []
-        self.training = 0
         ###Set Up Inputs###
         self.inputs = []
         for i in range(self.input):
             self.inputs.append(0)
         for i in range(self.input):
-            self.inputs[i] = nucleus(1)
+            self.inputs[i] = nucleus(1,"rel")
         ###################
         self.inwires = []
         for i in range(self.input):
@@ -96,14 +107,14 @@ class net():
         ###Set Up Hidden Layers###
         self.middle_1 = []
         for i in range(self.width):
-            self.middle_1.append(nucleus(self.input))
+            self.middle_1.append(nucleus(self.input,"rel"))
         self.middle_wire_in = []
         for i in range(self.input):
             for j in range(self.width):
                 self.middle_wire_in.append(wire(self.inputs[i],self.middle_1[j],i))
         self.middle_n = []
         for i in range(self.width):
-            self.middle_n.append(nucleus(self.width))
+            self.middle_n.append(nucleus(self.width,"rel"))
         self.middle_wires = []
         if self.hidden == 2:
             for i in range(self.width):
@@ -118,7 +129,7 @@ class net():
                 for j in range(self.width):
                     self.middle[i].append(0)
                 for j in range(self.width):
-                    self.middle[i][j] = nucleus(self.width)
+                    self.middle[i][j] = nucleus(self.width,"rel")
             for i in range(self.hidden-1):
                 self.middle_wires.append([])
             for i in range(self.hidden-1):
@@ -127,14 +138,14 @@ class net():
                         if (i==0):
                             self.middle_wires[i].append(wire(self.middle_1[j],self.middle[i][k],j))
                         elif (i==self.hidden-2):
-                            self.middle_wires[i].append(wire(self.middle[i-2][j],self.middle_n[k],j))
+                            self.middle_wires[i].append(wire(self.middle[i-1][j],self.middle_n[k],j))
                         else:
                             self.middle_wires[i].append(wire(self.middle[i-1][j],self.middle[i][k],j))
         ########################## 
         ###Set Up Output###
         self.outputs = []
         for i in range(self.output):
-            self.outputs.append(nucleus(self.width))
+            self.outputs.append(nucleus(self.width,"sig"))
         #for i in self.outputs:
             #i.end = 1
         self.middle_wire_out = []
@@ -176,22 +187,13 @@ class net():
         for j in self.middle_n:
             j.pass_in()
             j.pass_out()
-        #for j in self.middle_wire_out:
-        #    if (self.training > 0):
-        #        j.train = 1
-        #    j.update()
 
     def move(self):
         self.in_net()
-        for i in self.inwires:
-            print("INPUT: ",i.value)
         self.mid_net()
         self.out_net()
-        for i in self.wires_out:
-            print("OUTPUT: ",i.value)
 
     def train(self):
-        self.training = 1
         for j in self.inputs:
             j.train = 1
         for j in self.middle_1:
@@ -203,33 +205,224 @@ class net():
             j.train = 1
         for j in self.outputs:
             j.train = 1
-        #Start at the outputs - for now just make it work with this set of data, then focus on something generic, maybe a new function that expects a certain array
         self.c = 1
-        ##Start at the end -- self.wires_out this will be the predicted value, training data value will be the true
         j = 0
-        #if (len(self.train_data.shape) > 2):
-        #    if (self.train_data.shape[1] != len(self.wires_out) + 1):
-        #        raise TypeError("Training data must have the same shape as the outputs of the net--> ","Number of Wires Out: ",len(self.wires_out)," Shape of Data Array: ",self.train_data.shape[1])
-        print(len(self.train_data))
         ##This needs to be changed for inputs and outputs > 1
         while j < len(self.train_data):
+            if (j == 10):
+                break
             for i in self.inwires:
                 i.value = float(self.train_data[j,1])
+            print("\nINPUT: ",self.inwires[0].value)
             self.move()
-            diff = []
+            print("\nNEURON OUTPUT: ",self.wires_out[0].input.output," WIRE OUTPUT: ",self.wires_out[0].value," TRAINING VALUE: ",self.train_data[j,0],"\n")
+            b = 0
             for i in range(len(self.outputs)):
-                diff.append((self.outputs[i].value - self.train_data[j,0]) * (self.outputs[i].value * (1 - self.outputs[i].value)))
-            print(diff)
-            for i in range(len(self.middle_n)):
-                for t in range(len(self.outputs)):
-
-
+                diff = -((self.train_data[j,0]/self.outputs[i].value) + ((1-self.train_data[j,0])/(1-self.outputs[i].value)))
+                dz = 0
+                b = 0
+                if (self.outputs[i].active == "sig"):
+                    dz = self.outputs[i].value * (1 - self.outputs[i].value)
+                if (self.outputs[i].active == "rel"):
+                    if (diff > 0):
+                        dz = 1
+                    else:
+                        dz = 0
+                diff = diff * dz
+                b += diff
+                for t in range(len(self.middle_wire_out)):
+                    if (self.middle_wire_out[t].output == self.outputs[i]):
+                        self.middle_wire_out[t].input.training_val += self.middle_wire_out[t].weight * diff
+                        self.middle_wire_out[t].weight -= (1/self.width) * self.middle_wire_out[i].input.value * diff * self.c
+            print(self.middle_wire_out[0].input.training_val)
+            for i in range(len(self.middle_wire_out)):
+                self.middle_wire_out[t].bias -= (1/self.width) * b * self.c
+            i = self.hidden - 2
+            while (i >= 0):
+                b = 0
+                for t in self.middle_wires[i]:
+                    diff = 0
+                    if (t.output.active == "sig"):
+                        diff = t.output.training_val * t.output.value * (1 - t.output.value)
+                    if (t.output.active == "rel"):
+                        if (t.output.value > 0):
+                            diff = t.output.training_val
+                        else:
+                            diff = 0
+                    b+=diff
+                    t.input.training_val += t.weight * diff
+                    t.weight -= (1/self.width) * t.input.value * diff * self.c
+                print(b)
+                for t in self.middle_wires[i]:
+                    t.output.training_val = 0
+                    t.bias -= (1/self.width) * b * self.c
+                i-=1
+            b = 0
+            for t in self.middle_wire_in:
+                diff = 0
+                if (t.output.active == "sig"):
+                    diff = t.output.training_val * t.output.value * (1 - t.output.value)
+                if (t.output.active == "rel"):
+                    if (t.output.value > 0):
+                        diff = t.output.training_val
+                    else:
+                        diff = 0
+                b+=diff
+                t.input.training_val += t.weight * diff
+                t.weight -= (1/len(self.inputs)) * t.input.value * diff * self.c
+            for t in self.middle_wire_in:
+                t.bias -= (1/len(self.inputs)) * b * self.c
             j+=1
-            
+            print(100*float(j)/float(len(self.train_data)),"%")
+        for u in self.inputs:
+            u.train = 0
+        for u in self.middle_1:
+            u.train = 0
+        for u in range(self.hidden-2):
+            for t in self.middle[u]:
+                t.train = 0
+        for t in self.middle_n:
+            t.train = 0
+        for t in self.outputs:
+            t.train = 0
 
-        ##Calculate difference between true and predicted for the last neuron
-        ##Go through this for every layer (dA)
-        
+    def draw(self):
+        max = 0.00001
+        for i in self.middle_wire_in:
+            if abs(i.weight) > max:
+                max = abs(i.weight)
+        for i in range(self.hidden - 1):
+            for j in self.middle_wires[i]:
+                if abs(j.weight) > max:
+                    max = abs(j.weight)
+        for i in self.middle_wire_out:
+            if abs(i.weight) > max:
+                max = abs(i.weight)
+        x = []
+        y = []
+        for i in range(len(self.inputs)):
+            x.append(0)
+            y.append((i+1)*(self.width)/(len(self.inputs)+1))
+        plt.scatter(x,y,c='green')
+        x = []
+        y = []
+        for i in range(len(self.middle_1)):
+            x.append(1)
+            y.append(i)
+        for i in range(self.hidden - 2):
+            for j in range(self.width):
+                x.append(i+2)
+                y.append(j)
+        for i in range(len(self.middle_n)):
+            x.append(self.hidden)
+            y.append(i)
+        plt.scatter(x,y,c='blue')
+        x = []
+        y = []
+        for i in range(len(self.outputs)):
+            x.append(self.hidden+1)
+            y.append((i+1)*(self.width)/(len(self.outputs)+1))
+        plt.scatter(x,y,c='red')
+        w_x = []
+        w_y = []
+        for i in range(len(self.inputs)):
+            w_x.append(-1.5)
+            w_x.append(0)
+            w_y.append((i+1)*(self.width)/(len(self.inputs)+1))
+            w_y.append((i+1)*(self.width)/(len(self.inputs)+1))
+            plt.plot(w_x,w_y,c='green',alpha=1.0)
+            w_x = []
+            w_y = []
+        for i in range(len(self.inputs)):
+            for j in range(len(self.middle_1)):
+                w_x.append(0)
+                w_x.append(1)
+                w_y.append((i+1)*(self.width)/(len(self.inputs)+1))
+                w_y.append(j)
+                tra = 0
+                for u in self.middle_wire_in:
+                    if (u.input == self.inputs[i] and u.output == self.middle_1[j]):
+                        tra = u.weight/max
+                if (tra > 0.0):
+                    plt.plot(w_x,w_y,c='blue',alpha=abs(tra))
+                elif (tra <= 0.0):
+                    plt.plot(w_x,w_y,c='red',alpha=abs(tra))
+                w_x = []
+                w_y = []
+        for i in range(len(self.middle_1)):
+            for j in range(len(self.middle[0])):
+                w_x.append(1)
+                w_x.append(2)
+                w_y.append(i)
+                w_y.append(j)
+                tra = 0
+                for u in self.middle_wires[0]:
+                    if (u.input == self.middle_1[i] and u.output == self.middle[0][j]):
+                        tra = u.weight/max
+                if (tra > 0.0):
+                    plt.plot(w_x,w_y,c='blue',alpha=abs(tra))
+                elif (tra <= 0.0):
+                    plt.plot(w_x,w_y,c='red',alpha=abs(tra))
+                w_x = []
+                w_y = []
+        for t in range(self.hidden-3):
+            for i in range(self.width):
+                for j in range(self.width):
+                    w_x.append(t+2)
+                    w_x.append(t+3)
+                    w_y.append(i)
+                    w_y.append(j)
+                    tra = 0
+                    for u in self.middle_wires[t+1]:
+                        if (u.input == self.middle[t][i] and u.output == self.middle[t+1][j]):
+                            tra = u.weight/max
+                    if (tra > 0.0):
+                        plt.plot(w_x,w_y,c='blue',alpha=abs(tra))
+                    elif (tra <= 0.0):
+                        plt.plot(w_x,w_y,c='red',alpha=abs(tra))
+                    w_x = []
+                    w_y = []
+        for i in range(len(self.middle[-1])):
+            for j in range(len(self.middle_n)):
+                w_x.append(self.hidden-1)
+                w_x.append(self.hidden)
+                w_y.append(i)
+                w_y.append(j)
+                tra = 0
+                for u in self.middle_wires[-1]:
+                    if (u.input == self.middle[-1][i] and u.output == self.middle_n[j]):
+                        tra = u.weight/max
+                if (tra > 0.0):
+                    plt.plot(w_x,w_y,c='blue',alpha=abs(tra))
+                elif (tra <= 0.0):
+                    plt.plot(w_x,w_y,c='red',alpha=abs(tra))
+                w_x = []
+                w_y = []
+        for i in range(len(self.middle_n)):
+            for j in range(len(self.outputs)):
+                w_x.append(self.hidden)
+                w_x.append(self.hidden+1)
+                w_y.append(i)
+                w_y.append((j+1)*(self.width)/(len(self.outputs)+1))
+                tra = 0
+                for u in self.middle_wire_out:
+                    if (u.input == self.middle_n[i] and u.output == self.outputs[j]):
+                        tra = u.weight/max
+                if (tra > 0.0):
+                    plt.plot(w_x,w_y,c='blue',alpha=abs(tra))
+                elif (tra <= 0.0):
+                    plt.plot(w_x,w_y,c='red',alpha=abs(tra))
+                w_x = []
+                w_y = []
+        for i in range(len(self.outputs)):
+            w_x.append(self.hidden+1)
+            w_x.append(self.hidden+2.5)
+            w_y.append((i+1)*(self.width)/(len(self.outputs)+1))
+            w_y.append((i+1)*(self.width)/(len(self.outputs)+1))
+            plt.plot(w_x,w_y,c='red',alpha=1.0)
+            w_x = []
+            w_y = []
+        plt.show()
 
 
 
@@ -243,33 +436,24 @@ for row in read:
     if (row[2] == 'Pclass'):
         continue
     else:
-        data_arr[length,1] = float(row[2])
+        data_arr[length,1] = float(row[10])
         if (float(row[1]) == 1):
-            data_arr[length,0] = float(row[1])
+            data_arr[length,0] = 0.99
         else:
-            data_arr[length,0] = -1
+            data_arr[length,0] = 0.001
     length += 1
-print(data_arr)
-
-ne = net(1,10,10,1)
+m = 0
+for i in data_arr[:,1]:
+    if (i > m):
+        m = i
+data_arr[:,1] = data_arr[:,1]/m
+ne = net(1,6,5,1)
 #ne.inwires[0].value = -2.0
 #ne.move()
+ne.draw()
 ne.train_data = data_arr
 ne.train()
-#n.inwires[0].value = data_arr[0,0]
-#n.move()
-#n.train_data = data_arr[1,:]
-#n.train()
-
-
-#im = image()
-#print(im.frame.shape)
-#import matplotlib.pyplot as plt
-#plt.imshow(im.frame)
-#plt.show()
-
-
-
+ne.draw()
 ####THINGS THAT NEED TO BE ADDED####
 
 #  Read data continuously not just input-output-input
